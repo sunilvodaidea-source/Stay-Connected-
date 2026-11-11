@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stay Connected - Chinvata</title>
+<style>
+body{font-family:Arial;background:#f2f2f2;margin:0;padding:15px}
+.card{background:white;max-width:480px;margin:auto;padding:20px;border-radius:15px;box-shadow:0 4px 15px rgba(0,0,0,0.1)}
+h1{text-align:center;margin:0}.sub{text-align:center;color:#555}
+label{font-weight:bold;display:block;margin-top:14px}
+input,textarea{width:100%;padding:12px;margin-top:5px;border:1px solid #ddd;border-radius:10px;font-size:16px;box-sizing:border-box}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.btn{width:100%;padding:15px;border:none;border-radius:12px;font-size:18px;font-weight:bold;color:white;margin-top:12px;cursor:pointer}
+.red{background:#e11d48}.green{background:#22c55e}.teal{background:#14b8a6}.dark{background:#2e3a5a}.install{background:#16a34a}
+.msgbox{background:#f8f8f8;border-radius:10px;padding:10px;margin-top:10px;font-size:13px;min-height:60px;max-height:220px;overflow:auto}
+.bottom1{text-align:center;background:#fef3c7;border:1px solid #f59e0b;padding:10px;border-radius:10px;font-weight:bold;margin-top:15px}
+.bottom2{text-align:center;background:#2563eb;color:white;padding:8px 15px;border-radius:20px;font-size:13px;font-weight:bold;margin:10px auto 0;width:fit-content}
+.ackbox{background:#fef3c7;border:3px solid #f59e0b;border-radius:10px;padding:12px;margin-top:10px;text-align:center;display:none}
+.status{text-align:center;font-size:13px;font-weight:bold;margin-top:10px;padding:8px;border-radius:10px;background:#dcfce7;color:#166534}
+.flash{animation:flash 0.6s 3}@keyframes flash{0%{background:#fff}50%{background:#fde68a}100%{background:#fff}}
+.debug{font-size:11px;color:#888;text-align:center;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Connecting Peoples ❤️</h1>
+<p class="sub">Stay Connected With Your Loved Ones</p>
+<button class="btn" style="background:#f97316" onclick="enableSound()">🔔 Enable Sound / Notification</button>
+<div id="status" class="status">🟢 Listening... Waiting for Alert</div>
+<div id="debug" class="debug"></div>
+<label>Country Code</label>
+<input id="code" type="text" value="+91">
+<div class="row"><div><label>Sender Name</label><input id="myName" placeholder="Your Name"></div>
+<div><label>To Number</label><input id="phone" placeholder="To Number" type="tel"></div></div>
+<label>Message</label>
+<textarea id="msg" rows="3">Test</textarea>
+<button class="btn red" onclick="sendAlert()">Send Alert - To App</button>
+<button class="btn green" onclick="sendWhatsApp()">Send WhatsApp</button>
+<button class="btn teal" onclick="sendSMS()">Send SMS</button>
+<h3>Received Messages</h3>
+<div class="msgbox" id="history"></div>
+<div id="ackBox" class="ackbox">
+<div id="ackText" style="font-weight:bold"></div>
+<button class="btn green" style="margin-top:10px" onclick="sendAck()">✅ Ack - Got It</button>
+</div>
+<button class="btn dark" onclick="clearAll()">Clear / Delete All</button>
+<button id="installBtn" class="btn install">📥 Download App</button>
+<div class="bottom1">Designed by : Chinvata (Sunil)</div>
+<div class="bottom2">© 2026 Chinvata - All Rights Reserved</div>
+</div>
+<script>
+let deferredPrompt;
+let audioCtx=null;
+let seenIds = new Set(JSON.parse(localStorage.getItem('chinvata_seen')||'[]'));
+let myDeviceId = localStorage.getItem('chinvata_device') || ('dev'+Date.now()+Math.floor(Math.random()*9999));
+localStorage.setItem('chinvata_device', myDeviceId);
+const TOPIC='chinvata2026alert3';
+const ACK_TOPIC='chinvata2026ack3';
+let pollFailCount=0;
+window.addEventListener('beforeinstallprompt', e=>{e.preventDefault();deferredPrompt=e;});
+document.getElementById('installBtn').addEventListener('click', async ()=>{
+ if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;}
+ else{alert('Browser Menu (3 dots) -> Add to Home Screen');}
+});
+function saveSeen(){ localStorage.setItem('chinvata_seen', JSON.stringify([...seenIds].slice(-50))); }
+function beep(){
+  try{
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    [0,0.7,1.4].forEach(d=>{
+      let o=audioCtx.createOscillator(); let g=audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.frequency.value=880; o.type='sine';
+      let t=audioCtx.currentTime+d;
+      g.gain.setValueAtTime(0.7,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.6);
+      o.start(t); o.stop(t+0.6);
+    });
+  }catch(e){}
+}
+function enableSound(){ beep(); if("Notification" in window){ Notification.requestPermission(); } document.getElementById('status').innerText='🟢 Sound ON - Listening...'; alert('Sound ON!'); }
+function addHistory(t){ let h=document.getElementById('history'); let time=new Date().toLocaleTimeString(); h.innerHTML = time+' - '+t+'<br>' + h.innerHTML; }
+async function sendAlert(){
+  let name=document.getElementById('myName').value||'Friend';
+  let phone=document.getElementById('phone').value.trim();
+  let text=document.getElementById('msg').value;
+  let id='m'+Date.now();
+  let payload={id:id, device:myDeviceId, from:name, to:phone||'All', text:text, time:Date.now()};
+  seenIds.add(id); saveSeen();
+  addHistory('Alert To App: '+text+' (To: '+(phone||'All')+')');
+  try{
+    let r=await fetch('https://ntfy.sh/'+TOPIC,{method:'POST', body:JSON.stringify(payload)});
+    if(r.ok) alert('Alert Sent ❤️ - Mobile ನಲ್ಲಿ 6 ಸೆಕೆಂಡ್ ನಲ್ಲಿ ಬರಬೇಕು');
+    else alert('Send Failed - Code: '+r.status);
+  }catch(e){ alert('Net Problem - '+e.message); }
+}
+async function sendAck(){
+  let payload={id:'a'+Date.now(), device:myDeviceId, from:document.getElementById('myName').value||'Friend', text:'Ack - Got your alert', time:Date.now()};
+  seenIds.add(payload.id); saveSeen();
+  try{ await fetch('https://ntfy.sh/'+ACK_TOPIC,{method:'POST', body:JSON.stringify(payload)}); }catch(e){}
+  document.getElementById('ackBox').style.display='none';
+  addHistory('You sent Ack ✅');
+}
+function showAlertMsg(from,text,to){
+  beep();
+  if(navigator.vibrate) try{navigator.vibrate([400,100,400,100,400]);}catch(e){}
+  document.body.classList.remove('flash'); void document.body.offsetWidth; document.body.classList.add('flash');
+  if("Notification" in window && Notification.permission==='granted'){ try{ new Notification('Alert from '+from,{body:text}); }catch(e){} }
+  addHistory('🔔 Alert Received from '+from+' (To: '+to+'): '+text);
+  document.getElementById('ackText').innerText='Alert from '+from+': '+text;
+  document.getElementById('ackBox').style.display='block';
+}
+async function pollTopic(topic, isAck){
+  try{
+    let since = Math.floor(Date.now()/1000) - 120;
+    let r=await fetch('https://ntfy.sh/'+topic+'/json?poll=1&since='+since,{cache:'no-store'});
+    if(!r.ok){
+      if(r.status===429){ pollFailCount++; document.getElementById('debug').innerText='Busy (429) - Waiting...'; return; }
+      return;
+    }
+    pollFailCount=0;
+    let txt=await r.text();
+    if(!txt) return;
+    let lines=txt.trim().split('\n');
+    for(let i=lines.length-1;i>=0;i--){
+      let m=null; try{ m=JSON.parse(lines[i]); }catch(e){ continue; }
+      if(!m || !m.message) continue;
+      let data=null; try{ data=JSON.parse(m.message); }catch(e){ continue; }
+      if(!data || !data.id) continue;
+      if(seenIds.has(data.id)) continue;
+      if(data.device===myDeviceId){ seenIds.add(data.id); saveSeen(); continue; }
+      if(Date.now()-(data.time||0) > 10*60*1000){ seenIds.add(data.id); saveSeen(); continue; }
+      seenIds.add(data.id); saveSeen();
+      if(isAck){ addHistory('✅ Ack Received from '+(data.from||'Friend')); beep(); }
+      else { showAlertMsg(data.from||'Friend', data.text||'', data.to||'All'); }
+      break;
+    }
+    document.getElementById('debug').innerText='OK - Checked | MyID: '+myDeviceId.slice(0,8);
+  }catch(e){ document.getElementById('debug').innerText='Poll fail: '+e.message; }
+}
+let toggle=false;
+async function poll(){
+  if(toggle){ await pollTopic(ACK_TOPIC,true); } else { await pollTopic(TOPIC,false); }
+  toggle=!toggle;
+  document.getElementById('status').innerText='🟢 Listening... Last Check: '+new Date().toLocaleTimeString();
+  let delay = pollFailCount>0 ? 12000 : 6000;
+  setTimeout(poll, delay);
+}
+poll();
+function sendWhatsApp(){ let code=document.getElementById('code').value.trim()||'+91'; let phone=document.getElementById('phone').value.trim(); let text=document.getElementById('msg').value; let name=document.getElementById('myName').value||'Friend'; if(!phone||phone.length<10){alert('WhatsApp ಗೆ 10 digit number ಹಾಕಿ!');return;} addHistory('WhatsApp Sent To '+code+phone+': '+text); window.open('https://wa.me/'+(code+phone).replace('+','')+'?text='+encodeURIComponent(text+'\n- From '+name),'_blank'); }
+function sendSMS(){ let code=document.getElementById('code').value.trim()||'+91'; let phone=document.getElementById('phone').value.trim(); let text=document.getElementById('msg').value; if(!phone||phone.length<10){alert('SMS ಗೆ 10 digit number ಹಾಕಿ!');return;} addHistory('SMS Sent To '+code+phone+': '+text); window.location.href='sms:'+code+phone+'?body='+encodeURIComponent(text); }
+function clearAll(){ document.getElementById('history').innerHTML=''; document.getElementById('ackBox').style.display='none'; }
+</script>
+</body>
+</html>
